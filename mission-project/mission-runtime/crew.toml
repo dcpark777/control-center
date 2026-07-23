@@ -1,0 +1,42 @@
+# mission — default knobs
+# Layered: ~/.crew/crew.toml (user) <- ./crew/crew.toml (repo-local overrides).
+# Every number the Captain's codex or the harness references lives here,
+# never hardcoded. Tune freely; run the eval suite after tuning.
+
+[sizing]
+# Axis-score thresholds: 0-2 SMALL, 3-5 MEDIUM, 6-8 LARGE (codex §1)
+small_max = 2
+medium_max = 5
+
+[questions]
+small = 0
+medium = 2
+large = 4
+max_clarify_cycles = 2        # codex §11 clarification-loop breaker
+
+[recon]
+time_cap_minutes = 3
+default_for = ["medium", "large"]   # code-touching missions
+
+[casting]
+max_members_small = 1
+max_members_medium = 2
+max_members_large = 4         # more requires explicit Command approval
+
+[execution]
+max_attempts = 3              # per step, including redos
+identical_failure_stop = 2    # stop early after N identical failures
+plan_reread_debounce_seconds = 10
+
+[notifications]
+notify_on = ["paused-for-you", "failed"]
+terminal_bell = true
+os_notification = true
+
+[campaign]
+validate_before_fleet = true  # repo #2 is always a validation mission
+review_sweep_batch = true     # external actions batched to one sweep
+
+[costs]
+show_estimates_before_launch = true
+warn_if_mission_usd_over = 5.0

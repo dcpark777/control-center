@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cosmo · platform fleet · v6</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root{
+    --bg:#070c17; --panel:#101a2d; --panel2:#0c1524; --line:#22304a;
+    --text:#e8eef7; --muted:#8fa3bf; --faint:#5b6e8c;
+    --accent:#5ad1e6; --accent-dim:#2a6f7e;
+    --good:#46c98b; --warn:#e6b45a; --crit:#e8646a; --unknown:#7a8aa5;
+    --ring:#9db4d4; --ai:#a58cf2; --pkg:#a58cf2;
+    --radius:10px; --sbw:380px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{background:var(--bg); color:var(--text); font-family:'Space Grotesk',system-ui,sans-serif; font-size:14px; overflow:hidden}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  button:focus-visible, a:focus-visible, input:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
+  /* ── header ── */
+  header{height:52px; display:flex; align-items:center; gap:12px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--panel2)}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 8px var(--warn); flex:none}
+  .brand{display:flex; align-items:baseline; gap:9px}
+  .brand b{font-size:17px; font-weight:600; letter-spacing:.04em}
+  .brand span{color:var(--muted); font-size:12.5px}
+  .pop-wrap{position:relative}
+  .pop-wrap > button{background:transparent; border:1px solid var(--line); border-radius:8px; color:var(--faint); font-family:'IBM Plex Mono',monospace; font-size:11px; padding:5px 10px; cursor:pointer}
+  .pop-wrap > button:hover{color:var(--text); border-color:var(--faint)}
+  .pop{display:none; position:absolute; top:36px; left:0; z-index:50; width:270px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:11px 13px; box-shadow:0 12px 30px rgba(0,0,0,.5); font-size:12px}
+  .pop-wrap.open .pop{display:block}
+  .pop .row{display:flex; justify-content:space-between; align-items:center; padding:3px 0; color:var(--muted); gap:8px}
+  .pop .row b{color:var(--text); font-weight:500}
+  .pop .row.bad b{color:var(--crit)}
+  .spacer{flex:1}
+  .hbtn{background:transparent; border:1px solid var(--line); border-radius:8px; color:var(--muted); font-family:inherit; font-size:12.5px; padding:6px 12px; cursor:pointer}
+  .hbtn:hover{color:var(--text); border-color:var(--faint)}
+  .hbtn kbd{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--faint); border:1px solid var(--line); border-radius:4px; padding:0 4px; margin-left:6px}
+  .viewtoggle{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .viewtoggle button{background:transparent; color:var(--muted); border:0; padding:6px 13px; font-family:inherit; font-size:12.5px; cursor:pointer}
+  .viewtoggle button.active{background:var(--panel); color:var(--text)}
+  /* legend popover content */
+  .lg{display:flex; flex-direction:column; gap:7px; font-size:12px; color:var(--muted)}
+  .lg .row{display:flex; align-items:center; gap:8px; justify-content:flex-start}
+  .swatch{width:10px;height:10px;border-radius:50%; flex:none}
+  .glyph{font-family:'IBM Plex Mono',monospace; font-size:10px; width:14px; text-align:center; flex:none; color:var(--muted)}
+  .ringDemo{width:12px;height:12px;border-radius:50%;border:2px dashed var(--ring); flex:none}
+  .aiEdgeDemo{width:16px; border-top:2px dotted var(--ai); flex:none}
+
+  /* ── banner ── */
+  .banner{display:flex; align-items:center; gap:10px; padding:6px 14px; background:rgba(230,180,90,.08); border-bottom:1px solid rgba(230,180,90,.35); color:var(--warn); font-size:12px}
+  .banner .mono{color:var(--warn)}
+  .banner button{background:none; border:0; color:var(--warn); cursor:pointer; font-size:13px}
+  #bannerRetry{margin-left:auto; border:1px solid var(--warn); border-radius:6px; font-size:11px; padding:2px 10px; font-family:inherit}
+  #bannerX{margin-left:8px}
+
+  /* ── app frame ── */
+  .app{display:flex; height:calc(100% - 52px - 30px)}
+  .app.nobanner{height:calc(100% - 52px)}
+  .stage{flex:1; position:relative; overflow:hidden; min-width:0}
+  canvas#cv{display:block; cursor:grab}
+  canvas#cv:active{cursor:grabbing}
+
+  /* consolidated top strip */
+  .topstrip{position:absolute; top:10px; left:12px; right:12px; display:flex; align-items:center; gap:8px; z-index:20; pointer-events:none}
+  .topstrip > *{pointer-events:auto}
+  .vchips{display:flex; gap:6px; flex-wrap:wrap; max-width:46%}
+  .vchip{background:rgba(12,21,36,.9); border:1px solid var(--line); border-radius:20px; color:var(--muted); font-size:11.5px; padding:4px 11px; cursor:pointer; font-family:inherit}
+  .vchip:hover{color:var(--accent); border-color:var(--accent-dim)}
+  .vchip.on{border-color:var(--accent); color:var(--accent)}
+  .vchip.save{border-style:dashed; display:none}
+  .vchip.save.show{display:inline-block}
+  .statebar{margin-left:auto; display:flex; align-items:center; gap:8px; background:rgba(12,21,36,.92); border:1px solid var(--line); border-radius:10px; padding:6px 10px; font-size:12px; color:var(--muted); box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .statebar b{color:var(--text); font-weight:500; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .statebar button{background:transparent; border:1px solid var(--line); border-radius:6px; color:var(--muted); font-family:inherit; font-size:11.5px; padding:3px 9px; cursor:pointer}
+  .statebar button:hover:not(:disabled){color:var(--text); border-color:var(--faint)}
+  .statebar button:disabled{opacity:.35; cursor:default}
+
+  .hintstrip{position:absolute; top:52px; left:12px; z-index:19; display:flex; align-items:center; gap:10px; background:rgba(12,21,36,.85); border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--faint)}
+  .hintstrip button{background:none;border:0;color:var(--faint);cursor:pointer;font-size:12px}
+
+  .tooltip{position:absolute; z-index:30; pointer-events:none; display:none; background:rgba(16,26,45,.96); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; max-width:250px; box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  .tooltip .tt-name{font-weight:600}
+  .tooltip .tt-sub{color:var(--muted); margin-top:2px; font-size:11.5px}
+
+  .minimap{position:absolute; left:12px; bottom:36px; z-index:20; border:1px solid var(--line); border-radius:8px; background:rgba(10,17,30,.9); cursor:crosshair}
+  footer.mocknote{position:absolute; bottom:12px; left:12px; color:var(--faint); font-size:10.5px; z-index:20}
+
+  /* grid + todos views */
+  .grid,.todosView{position:absolute; inset:0; overflow-y:auto; padding:16px; display:none; background:var(--bg); z-index:15}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; align-content:start}
+  .grid.show{display:grid}
+  .todosView.show{display:block}
+  .tile{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; cursor:pointer; position:relative; text-align:left; font-family:inherit; color:var(--text)}
+  .tile:hover{border-color:var(--faint)}
+  .tile .bar{position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:var(--radius) 0 0 var(--radius)}
+  .tile h4{font-size:13px; font-weight:500; margin-bottom:6px; padding-left:6px}
+  .tile .sig{display:flex; flex-wrap:wrap; gap:5px; padding-left:6px}
+  .sigchip{font-size:10.5px; padding:2px 7px; border-radius:20px; border:1px solid var(--line); color:var(--muted)}
+  .sigchip.crit{color:var(--crit); border-color:var(--crit)}
+  .sigchip.warn{color:var(--warn); border-color:var(--warn)}
+  .sigchip.unknown{color:var(--unknown); border-color:var(--unknown)}
+  .completeness{margin-top:9px; padding-left:6px; display:flex; align-items:center; gap:7px; font-size:11px; color:var(--faint)}
+  .cbar{flex:1; height:3px; background:var(--line); border-radius:2px; overflow:hidden}
+  .cbar i{display:block; height:100%; background:var(--ring)}
+
+  .todosView h2{font-size:15px; font-weight:600; margin:4px 2px 12px}
+  table.tt{width:100%; border-collapse:collapse; font-size:12.5px}
+  table.tt th{font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:500; text-align:left; padding:6px 10px; border-bottom:1px solid var(--line)}
+  table.tt td{padding:8px 10px; border-bottom:1px solid rgba(34,48,74,.5); color:var(--muted); vertical-align:top}
+  table.tt td:first-child{color:var(--text)}
+  .tlink{color:var(--accent); background:none; border:0; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:0; text-align:left}
+  .tlink:hover{text-decoration:underline}
+  .badge{font-size:10px; border:1px solid var(--line); border-radius:20px; padding:1px 8px; color:var(--muted)}
+  .badge.over{color:var(--crit); border-color:var(--crit)}
+  .badge.recur{color:var(--ring); border-color:var(--ring)}
+  tr.done td{color:var(--faint)}
+  tr.done td:first-child{text-decoration:line-through}
+
+  /* ── right sidebar ── */
+  .sidebar{width:var(--sbw); min-width:var(--sbw); border-left:1px solid var(--line); background:var(--panel2); display:flex; flex-direction:column}
+  .app.sbHidden .sidebar{display:none}
+  .sb-head{display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line)}
+  .sb-head .mark{color:var(--accent); font-weight:600}
+  .sb-head b{font-size:13px; font-weight:600}
+  .grants{display:none; align-items:center; gap:6px; font-size:10.5px; color:var(--warn); margin-left:auto}
+  .grants.show{display:flex}
+  .grants .g{border:1px solid var(--warn); border-radius:20px; padding:1px 8px; display:flex; gap:6px; align-items:center}
+  .grants button{background:none;border:0;color:var(--warn);cursor:pointer;font-size:11px;padding:0}
+  .sb-collapse{margin-left:8px; background:none; border:1px solid var(--line); border-radius:6px; color:var(--faint); cursor:pointer; font-size:12px; padding:2px 8px}
+  .sb-collapse:hover{color:var(--text)}
+  .sb-expand{display:none; position:absolute; top:10px; right:12px; z-index:25; background:rgba(12,21,36,.92); border:1px solid var(--line); border-radius:8px; color:var(--muted); padding:6px 11px; cursor:pointer; font-family:inherit; font-size:12px}
+  .app.sbHidden .sb-expand{display:block}
+  .sb-expand:hover{color:var(--accent); border-color:var(--accent-dim)}
+  .sb-mini{background:none;border:1px solid var(--line);border-radius:6px;color:var(--faint);cursor:pointer;font-size:12px;padding:2px 8px;font-family:inherit}
+  .sb-mini:hover:not(:disabled){color:var(--text)}
+  .sb-mini:disabled{opacity:.35;cursor:default}
+  .bubble.brief{position:relative; padding-right:28px}
+  .brief-x{position:absolute; top:6px; right:8px; background:none;border:0;color:var(--faint);cursor:pointer;font-size:12px}
+  .brief-x:hover{color:var(--text)}
+  .vchip .vx{display:none; margin-left:7px; color:var(--faint)}
+  .vchip:hover .vx{display:inline}
+  .vchip .vx:hover{color:var(--crit)}
+  .vrename{background:transparent;border:0;outline:0;color:var(--accent);font:inherit;width:110px}
+
+  .selcard{border-bottom:1px solid var(--line); max-height:44%; overflow-y:auto; padding:12px 14px}
+  .verdict{display:flex; align-items:baseline; gap:8px; font-size:13px; margin-bottom:8px}
+  .verdict .vdot{width:9px;height:9px;border-radius:50%; flex:none; position:relative; top:0}
+  .verdict b{font-weight:600}
+  .verdict .vsub{color:var(--muted)}
+  .sc-type{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint)}
+  .sc-name{font-size:15px; font-weight:600; margin:2px 0 8px}
+  .np-actions{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:2px}
+  .np-actions a,.np-actions button{font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-decoration:none; color:var(--accent); border:1px solid var(--accent-dim); background:rgba(90,209,230,.05); border-radius:6px; padding:4px 9px; cursor:pointer}
+  .np-actions a:hover,.np-actions button:hover{background:rgba(90,209,230,.14)}
+  .np-sec{margin-top:12px}
+  .np-sec h5{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin-bottom:6px; font-weight:500}
+  .kv{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; color:var(--muted); gap:8px; align-items:baseline}
+  .kv b{color:var(--text); font-weight:500; text-align:right}
+  .kv .fr{color:var(--faint); font-size:10px; margin-left:5px}
+  .kv .fr.stale{color:var(--warn)}
+  .kv .missing{color:var(--warn); font-style:italic}
+  .kv .add{color:var(--accent); background:none; border:1px dashed var(--accent-dim); border-radius:5px; padding:1px 8px; font-size:11px; cursor:pointer; font-family:inherit}
+  .aiTag{color:var(--ai); font-size:10px; border:1px solid var(--ai); border-radius:20px; padding:1px 7px; margin-left:6px}
+  .np-todo{border:1px solid var(--line); border-radius:6px; padding:7px 9px; margin-bottom:6px; font-size:12px}
+  .np-todo .m{color:var(--faint); font-size:11px; margin-top:2px}
+  .np-todo.done .t{color:var(--faint); text-decoration:line-through}
+  .np-summary{font-size:12.5px; color:var(--muted); line-height:1.5; border-left:2px solid var(--ai); padding-left:10px}
+  .msel{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .msel .m1{font-family:'IBM Plex Mono',monospace; font-size:11px; border:1px solid var(--line); border-radius:20px; padding:2px 9px; color:var(--muted)}
+  .fleetline{color:var(--muted); font-size:12.5px; line-height:1.55}
+
+  .transcript{flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; scroll-behavior:smooth}
+  .bubble{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px 13px; font-size:12.5px; line-height:1.55; color:var(--text)}
+  .bubble.brief{border-color:var(--accent-dim)}
+  .brief-h{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:6px}
+  .brief-line{display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font-family:inherit; font-size:12.5px; padding:4px 0; cursor:pointer; border-bottom:1px dashed rgba(34,48,74,.6)}
+  .brief-line:last-of-type{border-bottom:0}
+  .brief-line:hover{color:var(--accent)}
+  .brief-line .d{color:var(--muted)}
+  .bubble .ops{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .op{font-size:10px; color:var(--accent); border:1px solid var(--accent-dim); border-radius:5px; padding:2px 8px; background:rgba(90,209,230,.06)}
+  .op.suggested{cursor:pointer; background:transparent; border-style:dashed}
+  .op.suggested:hover{background:rgba(90,209,230,.12)}
+  .op.done{opacity:.55; border-style:solid}
+  .gate{margin-top:9px; border:1px solid var(--warn); border-radius:8px; padding:8px 10px; font-size:12px}
+  .gate .g-title{color:var(--warn); font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px}
+  .gate .g-btns{display:flex; gap:6px; margin-top:7px}
+  .gate button{font-family:inherit; font-size:11px; border-radius:6px; padding:4px 10px; cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--muted)}
+  .gate button.ok{border-color:var(--good); color:var(--good)}
+  .gate button.ok:hover{background:rgba(70,201,139,.12)}
+  .gate button:hover{border-color:var(--faint); color:var(--text)}
+  .auditline{color:var(--faint); font-size:10px; margin-top:7px}
+  .issue{display:flex; gap:8px; align-items:baseline; padding:3px 0; font-size:12px}
+  .issue .repo{color:var(--muted)}
+  .issue a{color:var(--accent); text-decoration:none}
+  .fetching{color:var(--faint); font-style:italic}
+
+  .sb-suggest{display:flex; gap:6px; flex-wrap:wrap; padding:0 14px 8px}
+  .sb-suggest button{background:rgba(12,21,36,.9); border:1px solid var(--line); border-radius:20px; color:var(--muted); font-size:11px; padding:4px 10px; cursor:pointer; font-family:inherit}
+  .sb-suggest button:hover{color:var(--accent); border-color:var(--accent-dim)}
+  .askbar{display:flex; align-items:center; gap:9px; margin:0 14px 12px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 13px}
+  .askbar:focus-within{border-color:var(--accent)}
+  .askbar .mark{color:var(--accent); font-weight:600}
+  .askbar input{flex:1; background:transparent; border:0; outline:0; color:var(--text); font-family:inherit; font-size:13px}
+  .askbar input::placeholder{color:var(--faint)}
+
+  /* search overlay */
+  .searchOv{position:fixed; inset:0; z-index:60; display:none; align-items:flex-start; justify-content:center; padding-top:14vh; background:rgba(4,8,16,.6); backdrop-filter:blur(2px)}
+  .searchOv.open{display:flex}
+  .searchBox{width:min(480px,90vw); background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 24px 70px rgba(0,0,0,.6); overflow:hidden}
+  .searchBox input{width:100%; background:transparent; border:0; outline:0; color:var(--text); font-family:inherit; font-size:15px; padding:14px 16px; border-bottom:1px solid var(--line)}
+  .searchBox ul{list-style:none; max-height:300px; overflow-y:auto}
+  .searchBox li{padding:9px 16px; display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px}
+  .searchBox li.sel,.searchBox li:hover{background:rgba(90,209,230,.08)}
+  .searchBox li .sdot{width:9px;height:9px;border-radius:50%; flex:none}
+  .searchBox li .stype{margin-left:auto; color:var(--faint); font-size:11px}
+  .searchBox .shint{padding:8px 16px; color:var(--faint); font-size:11px; border-top:1px solid var(--line)}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; scroll-behavior:auto !important} }
+</style>
+</head>
+<body>
+
+<div class="searchOv" id="searchOv">
+  <div class="searchBox">
+    <input id="searchIn" type="text" placeholder="jump to node…" autocomplete="off" aria-label="Search nodes">
+    <ul id="searchList" role="listbox"></ul>
+    <div class="shint mono">↑↓ navigate · enter focus · esc close</div>
+  </div>
+</div>
+
+<header>
+  <div class="pulse" id="pulse" aria-hidden="true" title="1 collector degraded"></div>
+  <div class="brand"><b>cosmo</b><span>platform fleet</span></div>
+  <div class="pop-wrap" id="fresh">
+    <button aria-expanded="false">snapshot 2026-08-12 · 5 collectors ▾</button>
+    <div class="pop" role="status">
+      <div class="row"><span>github meta</span><b>2h ago</b></div>
+      <div class="row"><span>mend vulns</span><b>6h ago</b></div>
+      <div class="row bad" id="frJenkinsRow"><span>jenkins builds</span><b id="frJenkinsVal">partial · 2 timeouts 03:12</b></div>
+      <div class="row"><span>dependency scan</span><b>26h ago ⚠</b></div>
+      <div class="row"><span>github issues</span><b>7h ago</b></div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnExport" title="make render-static — read-only artifact for decks (stub)">⇩ export</button>
+  <button class="hbtn" id="btnSearch">⌕<kbd>⌘K</kbd></button>
+  <div class="pop-wrap" id="legend">
+    <button class="hbtn" style="font-family:inherit" aria-expanded="false" title="Legend">?</button>
+    <div class="pop" style="left:auto; right:0; width:250px">
+      <div class="lg">
+        <div class="row"><span class="swatch" style="background:var(--good);box-shadow:0 0 6px var(--good)"></span><span class="glyph"> </span>healthy</div>
+        <div class="row"><span class="swatch" style="background:var(--warn);box-shadow:0 0 6px var(--warn)"></span><span class="glyph">!</span>attention</div>
+        <div class="row"><span class="swatch" style="background:var(--crit);box-shadow:0 0 6px var(--crit)"></span><span class="glyph">✕</span>critical</div>
+        <div class="row"><span class="swatch" style="background:var(--unknown)"></span><span class="glyph">?</span>unknown · collector gap</div>
+        <div class="row"><span class="swatch" style="background:transparent;border:1.5px solid var(--muted)"></span><span class="glyph"> </span>table / lib</div>
+        <div class="row"><span class="swatch" style="background:var(--pkg);box-shadow:0 0 6px var(--pkg)"></span><span class="glyph"> </span>materialized package</div>
+        <div class="row"><span class="ringDemo"></span><span class="glyph"> </span>dashed ring = missing details</div>
+        <div class="row"><span class="aiEdgeDemo"></span><span class="glyph"> </span>dotted violet = ai-inferred edge</div>
+      </div>
+    </div>
+  </div>
+  <div class="viewtoggle" role="tablist">
+    <button id="btnGraph" class="active" role="tab" aria-selected="true">graph</button>
+    <button id="btnGrid" role="tab" aria-selected="false">grid</button>
+    <button id="btnTodos" role="tab" aria-selected="false">todos</button>
+  </div>
+</header>
+
+<div class="banner" id="banner">
+  <span>⚠ jenkins collector: 2 job timeouts at 03:12 — <span class="mono">alert-scoring</span> and <span class="mono">kyc-batch-checks</span> show <b>unknown</b> build status rather than a guess.</span>
+  <button id="bannerRetry">↻ retry jenkins</button>
+  <button id="bannerX" aria-label="Dismiss">✕</button>
+</div>
+
+<div class="app" id="app">
+  <main class="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="topstrip">
+      <div class="vchips" id="vchips">
+        <button class="vchip" data-view="crit">critical vulns<span class="vx" title="delete view">✕</span></button>
+        <button class="vchip" data-view="noncompliant">DIR-03 ✕<span class="vx" title="delete view">✕</span></button>
+        <button class="vchip save" id="saveView">+ save view</button>
+      </div>
+      <div class="statebar" role="status">
+        <span>state:</span><b id="stateDesc">fleet · all nodes</b>
+        <button id="sbBack" disabled title="Undo last view change">←</button>
+        <button id="sbFitAll" title="Fit fleet">fit</button>
+        <button id="sbReset" title="Clear everything">reset</button>
+      </div>
+    </div>
+
+    <div class="hintstrip" id="hintstrip">
+      <span>drag pan · scroll zoom · <b>⇧-click</b> multi-select · <span class="mono">⌘K</span> jump · <b>?</b> legend · <span class="mono">⌘/</span> chat</span>
+      <button id="hintX" aria-label="Dismiss hint">✕</button>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+    <canvas class="minimap" id="mini" width="150" height="104" title="Click to pan"></canvas>
+
+    <div class="grid" id="grid" role="list"></div>
+
+    <div class="todosView" id="todosView">
+      <h2>Todos · fleet</h2>
+      <table class="tt">
+        <thead><tr><th>item</th><th>linked to</th><th>due</th><th>recurs</th><th></th></tr></thead>
+        <tbody id="todoRows"></tbody>
+      </table>
+    </div>
+
+    <button class="sb-expand" id="sbExpand">⟨ chat</button>
+    <footer class="mocknote mono">mockup v6 · static data · canned queries + simulated approvals stand in for claude</footer>
+  </main>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <span class="mark">›</span><b>ask cosmo</b>
+      <button class="sb-mini" id="sbBack2" title="Back — undo last view change" disabled>←</button>
+      <button class="sb-mini" id="briefBtn" title="Show the 'since yesterday' briefing">☼</button>
+      <div class="grants" id="grants"><span class="g mono">grant: fetch issues <button id="revokeIssues" title="Revoke">✕</button></span></div>
+      <button class="sb-collapse" id="sbCollapse" title="Collapse (⌘/)">⟩</button>
+    </div>
+    <div class="selcard" id="selcard"></div>
+    <div class="transcript" id="transcript" aria-live="polite"></div>
+    <div class="sb-suggest">
+      <button data-q="which repos use snowflake-connector 2.0">1 · connector 2.0</button>
+      <button data-q="do these repos have open github issues mentioning v2.0 vulns">2 · issues for these</button>
+      <button data-q="show critical vulns">critical vulns</button>
+      <button data-q="path from txn_agg to card-decision-model">path txn_agg → cdm</button>
+      <button data-q="reset">reset</button>
+    </div>
+    <div class="askbar">
+      <span class="mark">›</span>
+      <input id="ask" type="text" placeholder="ask the fleet — or click the briefing above" autocomplete="off">
+    </div>
+  </aside>
+</div>
+
+<div class="sr-only" aria-live="polite" id="srLive"></div>
+
+<script>
+/* ───────── data ───────── */
+const REPOS = [
+ ["fraud-features",        3,4,"fail",     2,false,.45,"2.0.4"],
+ ["card-decision-model",   0,1,"pass",     1,true, .90,"3.1.0"],
+ ["txn-velocity-model",    0,0,"pass",     4,true, .80,"2.0.4"],
+ ["merchant-risk-batch",   1,2,"pass",    38,false,.30,"2.0.1"],
+ ["account-linkage",       0,3,"pass",    12,true, .65,"3.0.2"],
+ ["chargeback-predictor",  0,0,"pass",     6,true, .85,"3.1.0"],
+ ["device-fingerprint",    2,1,"fail",    51,false,.25,"2.0.1"],
+ ["auth-anomaly-batch",    0,0,"pass",     3,true, .75,"3.1.0"],
+ ["synthetic-id-model",    0,2,"pass",    19,true, .55,"2.0.4"],
+ ["rules-engine-adapter",  0,0,"pass",     9,true, .70,null],
+ ["feature-backfill",      1,0,"pass",    44,false,.35,"2.0.1"],
+ ["txn-enrichment",        0,0,"pass",     2,true, .95,"3.1.0"],
+ ["alert-scoring",         0,0,"unknown",  7,true, .60,null],
+ ["kyc-batch-checks",      0,0,"unknown", 15,true, .50,"3.0.2"],
+ ["dispute-classifier",    0,0,"pass",    27,true, .40,"2.0.4"],
+ ["velocity-aggregates",   0,0,"pass",     1,true, .88,"3.1.0"],
+ ["mule-detection",        1,1,"pass",    33,false,.45,"3.0.2"],
+ ["geo-risk-model",        0,0,"pass",     8,true, .72,"3.1.0"],
+];
+const TABLES = ["txn_agg","txn_raw","merchant_dim","account_dim","device_events","alerts_out","features_v3","kyc_flags"];
+const LIBS   = ["kubekit","spark-obs"];
+const EDGES = [
+ ["fraud-features","txn_raw","reads"],["fraud-features","features_v3","writes"],
+ ["card-decision-model","txn_agg","reads"],["card-decision-model","features_v3","reads"],["card-decision-model","alerts_out","writes"],
+ ["txn-velocity-model","txn_agg","reads"],["txn-velocity-model","txn_raw","reads"],
+ ["merchant-risk-batch","merchant_dim","reads"],["merchant-risk-batch","txn_agg","reads",true,.72],
+ ["account-linkage","account_dim","reads"],["account-linkage","device_events","reads"],
+ ["chargeback-predictor","txn_agg","reads"],["chargeback-predictor","alerts_out","writes"],
+ ["device-fingerprint","device_events","reads"],
+ ["auth-anomaly-batch","device_events","reads"],["auth-anomaly-batch","alerts_out","writes"],
+ ["synthetic-id-model","account_dim","reads"],["synthetic-id-model","kyc_flags","reads",true,.66],
+ ["rules-engine-adapter","alerts_out","reads"],
+ ["feature-backfill","txn_raw","reads"],["feature-backfill","features_v3","writes",true,.90],
+ ["txn-enrichment","txn_raw","reads"],["txn-enrichment","txn_agg","writes"],
+ ["alert-scoring","alerts_out","reads"],
+ ["kyc-batch-checks","kyc_flags","writes"],["kyc-batch-checks","account_dim","reads"],
+ ["dispute-classifier","txn_agg","reads",true,.78],
+ ["velocity-aggregates","txn_raw","reads"],["velocity-aggregates","txn_agg","writes"],
+ ["mule-detection","account_dim","reads"],["mule-detection","device_events","reads",true,.71],
+ ["geo-risk-model","txn_agg","reads",true,.84],
+ ["fraud-features","kubekit","depends"],["card-decision-model","kubekit","depends"],
+ ["txn-velocity-model","kubekit","depends"],["txn-enrichment","spark-obs","depends"],
+ ["velocity-aggregates","spark-obs","depends"],["chargeback-predictor","kubekit","depends"],
+];
+const META = {
+ "fraud-features":{owner:null, purpose:"Builds core txn feature set for downstream models", runbook:null, deploy:"KFP nightly", consumers:"card-decision-model, feature-backfill", ai:["purpose"], links:{repo:"#", jenkins:"#", logs:"#", mend:"#"}},
+ "card-decision-model":{owner:"decisioning team", purpose:"Real-time card auth risk score, batch retrain", runbook:"go/cdm-runbook", deploy:"KFP weekly", consumers:"rules engine", ai:[], links:{repo:"#", jenkins:"#", logs:"#"}},
+ "merchant-risk-batch":{owner:null, purpose:null, runbook:null, deploy:"cron main.py", consumers:null, ai:[], links:{repo:"#"}},
+ "device-fingerprint":{owner:null, purpose:null, runbook:null, deploy:null, consumers:"auth-anomaly-batch", ai:["consumers"], links:{repo:"#", jenkins:"#"}},
+};
+const FRESH = {vulns:"6h", build:"18m", stale:"2h", compliant:"26h", connector:"26h"};
+const TODOS = {
+ "fraud-features":[
+   {t:"Rotate Snowflake OAuth secret", m:"recurs every 90d · overdue 6d", done:false},
+   {t:"Rotate Snowflake OAuth secret", m:"done 2026-05-06", done:true},
+ ],
+ "merchant-risk-batch":[{t:"Confirm owner with decisioning team", m:"no due date", done:false}],
+};
+const TODO_ROWS=[
+ {t:"Rotate Snowflake OAuth secret", target:"repo:fraud-features", node:"fraud-features", due:"overdue 6d", over:true, recur:"90d"},
+ {t:"Migrate read → txn_agg_v2", target:"edge · card-decision-model ⇢ txn_agg", node:"card-decision-model", due:"Oct 1", recur:null},
+ {t:"Confirm owner with decisioning team", target:"repo:merchant-risk-batch", node:"merchant-risk-batch", due:"—", recur:null},
+ {t:"Rotate Snowflake OAuth secret", target:"repo:fraud-features", node:"fraud-features", due:"done 2026-05-06", recur:"90d", done:true},
+];
+const SUMMARIES = {
+ "fraud-features":"Red driver: 3 critical vulns (pyarrow chain) + failing docker-build since #482. High centrality — 2 models read its output table.",
+ "device-fingerprint":"Stale 51d with 2 criticals and a failing build; no owner on record. Highest risk-per-attention node in the fleet.",
+ "merchant-risk-batch":"Non-compliant with DIR-2026-03; almost no curated metadata (30%). Candidate for this week's curation queue.",
+ "alert-scoring":"Build status unknown — jenkins collector timed out at 03:12. Everything else nominal; re-run the collector before trusting green.",
+};
+const ISSUES = {
+ "fraud-features":[{n:412,t:"Bump snowflake-connector-python: 2.0.x affected by CVE-2026-2214"}],
+ "merchant-risk-batch":[{n:238,t:"Mend: snowflake-connector-python 2.0.1 — critical (CVE-2026-2214)"}],
+ "device-fingerprint":[{n:301,t:"Mend: snowflake-connector-python 2.0.1 — critical (CVE-2026-2214)"},{n:299,t:"connector v2.0 TLS verify bypass — upgrade path blocked by pyarrow pin"}],
+ "feature-backfill":[{n:187,t:"Bump snowflake-connector-python to >=3.0 (CVE-2026-2214)"}],
+};
+
+const nodes=[];
+REPOS.forEach(r=>nodes.push({id:r[0], type:"repo", crit:r[1], high:r[2], build:r[3], stale:r[4], compliant:r[5], completeness:r[6], sc:r[7]}));
+TABLES.forEach(t=>nodes.push({id:t, type:"table", completeness:.7}));
+LIBS.forEach(l=>nodes.push({id:l, type:"lib", completeness:.9}));
+const byId=Object.fromEntries(nodes.map(n=>[n.id,n]));
+let links=EDGES.map(e=>({source:e[0], target:e[1], kind:e[2], ai:!!e[3], conf:e[4]}));
+function recountDeg(){ nodes.forEach(n=>n.deg=0);
+  links.forEach(l=>{ (typeof l.source==="object"?l.source:byId[l.source]).deg++; (typeof l.target==="object"?l.target:byId[l.target]).deg++; }); }
+recountDeg();
+
+function health(n){
+  if(n.type==="pkg") return "pkg";
+  if(n.type!=="repo") return "neutral";
+  if(n.crit>0 || n.build==="fail") return "crit";
+  if(n.build==="unknown") return "unknown";
+  if(n.high>0 || n.stale>30 || !n.compliant) return "warn";
+  return "good";
+}
+const HCOL={good:"#46c98b",warn:"#e6b45a",crit:"#e8646a",unknown:"#7a8aa5",neutral:"#39496b",pkg:"#a58cf2"};
+const GLYPH={crit:"✕",warn:"!",unknown:"?"};
+const HWORD={good:"healthy",warn:"attention",crit:"critical",unknown:"unknown"};
+function healthDetail(n){
+  const h=health(n);
+  if(h==="crit") return [n.crit?`${n.crit} crit vulns`:null, n.build==="fail"?"build failing":null].filter(Boolean).join(", ");
+  if(h==="unknown") return "jenkins collector gap";
+  if(h==="warn") return [n.high?`${n.high} high vulns`:null, n.stale>30?`stale ${n.stale}d`:null, !n.compliant?"DIR-03 ✕":null].filter(Boolean).join(", ");
+  return "all signals nominal";
+}
+function healthLine(n){
+  if(n.type==="pkg") return "materialized package · until reset";
+  if(n.type!=="repo") return `${n.type} · ${n.deg} connections`;
+  return `${HWORD[health(n)]} · ${healthDetail(n)}`;
+}
+
+/* ───────── canvas / layout ───────── */
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+let stars=[];
+function resize(){
+  const r=cv.parentElement.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=W*DPR; cv.height=H*DPR;
+  cv.style.width=W+"px"; cv.style.height=H+"px";
+  let s=1; const rand=()=>{s=(s*16807)%2147483647; return s/2147483647;};
+  stars=d3.range(140).map(()=>({x:rand()*W, y:rand()*H, r:rand()*1.1+.2, a:rand()*.5+.12}));
+}
+resize(); window.addEventListener("resize",resize);
+
+const sim=d3.forceSimulation(nodes)
+  .force("link", d3.forceLink(links).id(d=>d.id).distance(l=>l.kind==="depends"?60:l.kind==="uses"?70:84).strength(.5))
+  .force("charge", d3.forceManyBody().strength(-270))
+  .force("center", d3.forceCenter(0,0))
+  .force("collide", d3.forceCollide(d=>rad(d)+9))
+  .stop();
+for(let i=0;i<300;i++) sim.tick();
+nodes.forEach(n=>{n.fx=n.x; n.fy=n.y;});
+function rad(n){ return n.type==="repo" ? 8+Math.min(n.deg,6)*1.2 : n.type==="table" ? 6.5+Math.min(n.deg,8)*.9 : n.type==="pkg" ? 9 : 7.5; }
+
+const cam={x:0,y:0,k:1};
+let camTarget=null, camT=0;
+const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function flyTo(x,y,k){
+  if(reduceMotion){cam.x=x;cam.y=y;cam.k=k;camTarget=null;return;}
+  camTarget={x0:cam.x,y0:cam.y,k0:cam.k,x1:x,y1:y,k1:k}; camT=0;
+}
+function stepCam(){
+  if(!camTarget) return;
+  camT=Math.min(1,camT+.05);
+  const e=1-Math.pow(1-camT,3);
+  cam.x=camTarget.x0+(camTarget.x1-camTarget.x0)*e;
+  cam.y=camTarget.y0+(camTarget.y1-camTarget.y0)*e;
+  cam.k=camTarget.k0+(camTarget.k1-camTarget.k0)*e;
+  if(camT>=1) camTarget=null;
+}
+function fitIds(ids, pad){
+  const arr=[...ids].map(i=>byId[i]).filter(Boolean);
+  if(!arr.length) return;
+  const x0=d3.min(arr,n=>n.x)-40, x1=d3.max(arr,n=>n.x)+40;
+  const y0=d3.min(arr,n=>n.y)-40, y1=d3.max(arr,n=>n.y)+40;
+  const k=Math.min(2.4, Math.max(.4, Math.min(W/(x1-x0), H/(y1-y0))*(pad??.9)));
+  flyTo(-(x0+x1)/2*k, -(y0+y1)/2*k, k);
+}
+const fitAll=()=>fitIds(nodes.map(n=>n.id), .92);
+
+let focusSet=null, focusEdges=null, hoverId=null, hoverEdge=null;
+let selection=new Set();       // multi-select (⇧-click)
+let lastSelection=[];          // "these repos" — from selection or last filter
+function clearFocus(){focusSet=null; focusEdges=null;}
+
+/* draw */
+function draw(){
+  stepCam();
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  stars.forEach(s=>{ ctx.globalAlpha=s.a; ctx.fillStyle="#9db4d4"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); });
+  ctx.globalAlpha=1;
+  ctx.save();
+  ctx.translate(W/2+cam.x, H/2+cam.y);
+  ctx.scale(cam.k,cam.k);
+
+  links.forEach((l,i)=>{
+    const dim=focusSet && !(focusSet.has(l.source.id)&&focusSet.has(l.target.id));
+    const hot=(focusEdges&&focusEdges.has(i)) || hoverEdge===i;
+    ctx.beginPath(); ctx.moveTo(l.source.x,l.source.y); ctx.lineTo(l.target.x,l.target.y);
+    ctx.lineWidth=hot?2.2:1;
+    if(l.ai) ctx.setLineDash([2,4]);
+    else ctx.setLineDash(l.kind==="writes"?[6,4]:l.kind==="depends"?[2,3]:l.kind==="uses"?[1,3]:[]);
+    ctx.strokeStyle= hot?"rgba(90,209,230,.95)"
+      : dim?(l.ai?"rgba(120,100,180,.18)":"rgba(34,48,74,.28)")
+      : l.ai?"rgba(165,140,242,.5)":"rgba(120,145,185,.4)";
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  nodes.forEach(n=>{
+    const r=rad(n), dim=focusSet&&!focusSet.has(n.id);
+    const h=health(n), col=HCOL[h];
+    ctx.globalAlpha=dim?.12:1;
+    if(h!=="unknown"){
+      ctx.globalCompositeOperation="lighter";
+      const glowR=r*(n.type==="repo"?3.1:2.4);
+      const g=ctx.createRadialGradient(n.x,n.y,r*.3,n.x,n.y,glowR);
+      const gc=n.type==="repo"||n.type==="pkg"?col:"#5b7aa8";
+      g.addColorStop(0,gc+"55"); g.addColorStop(.5,gc+"1f"); g.addColorStop(1,gc+"00");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(n.x,n.y,glowR,0,7); ctx.fill();
+      ctx.globalCompositeOperation="source-over";
+    }
+    const coreR=n.type==="repo"||n.type==="pkg"?r*.62:r*.55;
+    ctx.beginPath(); ctx.arc(n.x,n.y,coreR,0,7);
+    if(n.type==="repo"||n.type==="pkg"){
+      if(n.type==="repo"&&n.completeness<.5){ ctx.fillStyle=col+"38"; ctx.fill(); ctx.lineWidth=1.6; ctx.strokeStyle=col; ctx.stroke(); }
+      else { ctx.fillStyle=col; ctx.fill(); ctx.beginPath(); ctx.arc(n.x,n.y,r*.24,0,7); ctx.fillStyle="#f2f7ff"; ctx.fill(); }
+      if(h==="unknown"){
+        ctx.save(); ctx.beginPath(); ctx.arc(n.x,n.y,coreR,0,7); ctx.clip();
+        ctx.strokeStyle="rgba(10,17,30,.75)"; ctx.lineWidth=1.4;
+        for(let q=-coreR;q<=coreR;q+=3.5){ ctx.beginPath(); ctx.moveTo(n.x+q-coreR,n.y-coreR); ctx.lineTo(n.x+q+coreR,n.y+coreR); ctx.stroke(); }
+        ctx.restore();
+      }
+    } else { ctx.fillStyle="#0a1120"; ctx.fill(); ctx.lineWidth=1.4; ctx.strokeStyle="#8aa2c6"; ctx.stroke(); }
+
+    const c=n.completeness??1, rw=(n.type==="repo"&&c<.5)?2.1:1.4;
+    ctx.beginPath(); ctx.arc(n.x,n.y,r+3.4,-Math.PI/2,-Math.PI/2+c*2*Math.PI);
+    ctx.lineWidth=rw; ctx.strokeStyle="rgba(157,180,212,.85)"; ctx.stroke();
+    if(c<1){ ctx.beginPath(); ctx.setLineDash([2,3]);
+      ctx.arc(n.x,n.y,r+3.4,-Math.PI/2+c*2*Math.PI,-Math.PI/2+2*Math.PI);
+      ctx.lineWidth=rw; ctx.strokeStyle="rgba(157,180,212,.32)"; ctx.stroke(); ctx.setLineDash([]); }
+
+    if(GLYPH[h]&&n.type==="repo"){
+      const bx=n.x+r*.85, by=n.y-r*.85;
+      ctx.beginPath(); ctx.arc(bx,by,5.6,0,7); ctx.fillStyle="#0a1120"; ctx.fill();
+      ctx.lineWidth=1; ctx.strokeStyle=col; ctx.stroke();
+      ctx.font="700 7.5px 'IBM Plex Mono', monospace"; ctx.fillStyle=col;
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(GLYPH[h],bx,by+.5); ctx.textBaseline="alphabetic";
+    }
+    if(selection.has(n.id)){
+      ctx.beginPath(); ctx.arc(n.x,n.y,r+8.5,0,7);
+      ctx.lineWidth=1.5; ctx.strokeStyle="#5ad1e6"; ctx.stroke();
+    }
+    const showLabel=hoverId===n.id||selection.has(n.id)||n.type==="pkg"
+      ||cam.k>=.85||(focusSet&&focusSet.has(n.id)&&focusSet.size<=25);
+    if(showLabel&&!dim){
+      ctx.font=`${n.type==="repo"?10.5:10}px 'IBM Plex Mono', monospace`;
+      ctx.fillStyle=n.type==="repo"?"#c9d6ea":n.type==="pkg"?"#c8b8f7":"#8fa3bf";
+      ctx.textAlign="center";
+      ctx.fillText(n.id,n.x,n.y+r+15);
+    }
+    ctx.globalAlpha=1;
+  });
+  ctx.restore();
+  drawMini();
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* minimap */
+const mini=document.getElementById("mini"), mctx=mini.getContext("2d");
+function worldBounds(){ return {x0:d3.min(nodes,n=>n.x)-50, x1:d3.max(nodes,n=>n.x)+50, y0:d3.min(nodes,n=>n.y)-50, y1:d3.max(nodes,n=>n.y)+50}; }
+function drawMini(){
+  const mw=mini.width, mh=mini.height, b=worldBounds();
+  const s=Math.min(mw/(b.x1-b.x0), mh/(b.y1-b.y0));
+  const ox=(mw-(b.x1-b.x0)*s)/2, oy=(mh-(b.y1-b.y0)*s)/2;
+  mctx.clearRect(0,0,mw,mh);
+  nodes.forEach(n=>{ mctx.fillStyle=HCOL[health(n)]||"#39496b";
+    mctx.globalAlpha=focusSet&&!focusSet.has(n.id)?.25:.9;
+    mctx.fillRect(ox+(n.x-b.x0)*s-1.2, oy+(n.y-b.y0)*s-1.2, 2.4,2.4); });
+  mctx.globalAlpha=1;
+  const vx0=(-W/2-cam.x)/cam.k, vx1=(W/2-cam.x)/cam.k;
+  const vy0=(-H/2-cam.y)/cam.k, vy1=(H/2-cam.y)/cam.k;
+  mctx.strokeStyle="rgba(90,209,230,.8)"; mctx.lineWidth=1;
+  mctx.strokeRect(ox+(vx0-b.x0)*s, oy+(vy0-b.y0)*s, (vx1-vx0)*s, (vy1-vy0)*s);
+}
+mini.addEventListener("click",e=>{
+  const r=mini.getBoundingClientRect(), b=worldBounds();
+  const s=Math.min(mini.width/(b.x1-b.x0), mini.height/(b.y1-b.y0));
+  const ox=(mini.width-(b.x1-b.x0)*s)/2, oy=(mini.height-(b.y1-b.y0)*s)/2;
+  const wx=(e.clientX-r.left-ox)/s+b.x0, wy=(e.clientY-r.top-oy)/s+b.y0;
+  flyTo(-wx*cam.k, -wy*cam.k, cam.k);
+});
+
+/* pointer: pan / zoom / hover (nodes + edges) / click + ⇧-click */
+let dragging=false,lx=0,ly=0,moved=0;
+const tooltip=document.getElementById("tooltip");
+function toWorld(px,py){ const r=cv.getBoundingClientRect();
+  return [(px-r.left-W/2-cam.x)/cam.k, (py-r.top-H/2-cam.y)/cam.k]; }
+function nodeAt(px,py){
+  const [x,y]=toWorld(px,py);
+  let best=null,bd=1e9;
+  nodes.forEach(n=>{const d=(n.x-x)**2+(n.y-y)**2; if(d<bd){bd=d;best=n;}});
+  return (best&&Math.sqrt(bd)<rad(best)+9)?best:null;
+}
+function edgeAt(px,py){
+  const [x,y]=toWorld(px,py); const tol=6/cam.k;
+  let best=-1,bd=tol;
+  links.forEach((l,i)=>{
+    const ax=l.source.x,ay=l.source.y,bx=l.target.x,by=l.target.y;
+    const L2=(bx-ax)**2+(by-ay)**2; if(!L2) return;
+    let t=((x-ax)*(bx-ax)+(y-ay)*(by-ay))/L2; t=Math.max(0,Math.min(1,t));
+    const d=Math.hypot(x-(ax+t*(bx-ax)), y-(ay+t*(by-ay)));
+    if(d<bd){bd=d;best=i;}
+  });
+  return best;
+}
+cv.addEventListener("pointerdown",e=>{dragging=true;moved=0;lx=e.clientX;ly=e.clientY;});
+window.addEventListener("pointermove",e=>{
+  if(dragging){
+    cam.x+=e.clientX-lx; cam.y+=e.clientY-ly; moved+=Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly);
+    lx=e.clientX;ly=e.clientY; camTarget=null; tooltip.style.display="none"; return;
+  }
+  if(e.target!==cv){hoverId=null;hoverEdge=null;tooltip.style.display="none";return;}
+  const n=nodeAt(e.clientX,e.clientY);
+  hoverId=n?n.id:null;
+  hoverEdge=n?null:edgeAt(e.clientX,e.clientY);
+  cv.style.cursor=(n||hoverEdge>-1)?"pointer":"grab";
+  const sr=cv.parentElement.getBoundingClientRect();
+  if(n){
+    tooltip.innerHTML=`<div class="tt-name mono">${n.id}</div><div class="tt-sub">${healthLine(n)}</div>`;
+  } else if(hoverEdge>-1){
+    const l=links[hoverEdge];
+    tooltip.innerHTML=`<div class="tt-name mono">${l.source.id} → ${l.target.id}</div>
+      <div class="tt-sub">${l.kind} · ${l.ai?`ai-inferred · conf ${l.conf}`:(l.kind==="uses"?"query-materialized":"codescan-ast · verified")}</div>`;
+  }
+  if(n||hoverEdge>-1){
+    tooltip.style.left=Math.min(e.clientX-sr.left+14, sr.width-260)+"px";
+    tooltip.style.top=(e.clientY-sr.top+14)+"px";
+    tooltip.style.display="block";
+  } else tooltip.style.display="none";
+});
+window.addEventListener("pointerup",e=>{
+  if(dragging&&moved<5&&e.target===cv){
+    const n=nodeAt(e.clientX,e.clientY);
+    if(n){ e.shiftKey?toggleSelect(n.id):selectSingle(n.id); }
+    else if(!e.shiftKey){ selection.clear(); syncSelection(); }
+  }
+  dragging=false;
+});
+cv.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const f=Math.exp(-e.deltaY*.0012);
+  cam.k=Math.min(3.2,Math.max(.35,cam.k*f)); camTarget=null;
+},{passive:false});
+
+/* ───────── selection + card ───────── */
+const selcard=document.getElementById("selcard");
+let panelNode=null;
+function selectSingle(id){ selection=new Set([id]); syncSelection(); }
+function toggleSelect(id){ selection.has(id)?selection.delete(id):selection.add(id); syncSelection(); }
+function syncSelection(){
+  const repos=[...selection].filter(id=>byId[id]&&byId[id].type==="repo");
+  if(repos.length) lastSelection=repos;
+  renderSelCard();
+}
+const fr=(k)=>{ if(panelNode&&panelNode.justRefreshed) return `<span class="fr">· just now</span>`;
+  const v=FRESH[k]; const stale=v==="26h"; return `<span class="fr ${stale?'stale':''}">· ${v}${stale?' ⚠':''}</span>`; };
+function edgeProvenance(id){
+  const mine=links.filter(l=>l.source.id===id||l.target.id===id);
+  const ai=mine.filter(l=>l.ai);
+  return `<div class="kv"><span>connections</span><b>${mine.length} · ${mine.length-ai.length} verified, ${ai.length} ai-inferred</b></div>`
+    + ai.map(l=>`<div class="kv"><span style="color:var(--ai)">↳ ${l.source.id===id?l.target.id:l.source.id}</span><b class="mono" style="color:var(--ai)">conf ${l.conf}</b></div>`).join("");
+}
+function sparkline(){
+  const pts=[6,6,5,7,7,5,4,4,3,3,3,3], w=250,h=30,max=8;
+  const d=pts.map((v,i)=>`${(i/(pts.length-1)*w).toFixed(1)},${(h-v/max*h).toFixed(1)}`).join(" ");
+  return `<svg width="${w}" height="${h}" style="margin-top:6px" aria-label="12-week critical vuln trend"><polyline points="${d}" fill="none" stroke="#8fa3bf" stroke-width="1.5"/></svg>`;
+}
+function renderSelCard(){
+  if(selection.size===0){
+    panelNode=null;
+    const crit=nodes.filter(n=>n.type==="repo"&&health(n)==="crit").length;
+    const unk=nodes.filter(n=>n.type==="repo"&&health(n)==="unknown").length;
+    selcard.innerHTML=`<div class="sc-type">fleet</div><div class="sc-name">platform fleet</div>
+      <div class="fleetline">41 repos · 14 tables · 96 edges<br>
+      <span style="color:var(--crit)">${crit} critical</span> · ${unk} unknown · DIR-03 at 74%<br>
+      <span style="color:var(--faint)">click a node — or ⇧-click several — then ask below.</span></div>`;
+    return;
+  }
+  if(selection.size>1){
+    panelNode=null;
+    const ids=[...selection];
+    selcard.innerHTML=`<div class="sc-type">selection</div><div class="sc-name">${ids.length} selected</div>
+      <div class="msel">${ids.map(i=>`<span class="m1">${i}</span>`).join("")}</div>
+      <div class="fleetline" style="margin-top:8px;color:var(--faint)">"these" in the ask bar now means this set.</div>`;
+    return;
+  }
+  const n=byId[[...selection][0]]; panelNode=n;
+  const h=health(n);
+  if(n.type!=="repo"){
+    selcard.innerHTML=`<div class="sc-type">${n.type}</div><div class="sc-name mono">${n.id}</div>
+      <div class="np-sec"><h5>Connections</h5>${edgeProvenance(n.id)}</div>`;
+    return;
+  }
+  const m=META[n.id]||{};
+  const linkBtns=m.links?Object.entries(m.links).map(([k,u])=>`<a href="${u}" onclick="return false" title="stub">↗ ${k}</a>`).join(""):"";
+  const buildVal=n.build==="unknown"
+    ?`<b style="color:var(--unknown)">unknown</b><span class="fr stale">· collector timeout ⚠</span>`
+    :`<b style="color:${n.build==='fail'?'var(--crit)':'var(--good)'}">${n.build}</b>${fr('build')}`;
+  const fields=[["owner",m.owner],["purpose",m.purpose],["runbook",m.runbook],["deploy",m.deploy],["consumers",m.consumers],["connector",n.sc?("snowflake-connector "+n.sc):null]];
+  const kv=fields.map(([k,v])=>{
+    const aiTag=(m.ai||[]).includes(k)?`<span class="aiTag">ai draft</span>`:"";
+    return v?`<div class="kv"><span>${k}${aiTag}</span><b>${v}</b></div>`
+      :`<div class="kv"><span>${k}</span><span class="missing">missing</span> <button class="add">+ add</button></div>`;
+  }).join("");
+  const todos=(TODOS[n.id]||[]).map(t=>`<div class="np-todo ${t.done?'done':''}"><div class="t">${t.done?'✓ ':''}${t.t}</div><div class="m mono">${t.m}</div></div>`).join("")
+    ||`<div class="kv"><span class="missing" style="color:var(--faint)">none</span></div>`;
+  const sum=SUMMARIES[n.id];
+  selcard.innerHTML=`
+    <div class="sc-type">repo</div><div class="sc-name mono">${n.id}</div>
+    <div class="verdict"><span class="vdot" style="background:${HCOL[h]};box-shadow:0 0 6px ${HCOL[h]}"></span>
+      <span><b>${HWORD[h]}</b> <span class="vsub">— ${healthDetail(n)} · ${Math.round(n.completeness*100)}% documented</span></span></div>
+    <div class="np-actions">${linkBtns}<button class="npRefresh" title="Re-run collectors for this node only (--only)">↻ refresh</button><button onclick="return false" title="stub">+ todo</button><button onclick="return false" title="stub">⚑ campaign</button></div>
+    <div class="np-sec"><h5>Signals</h5>
+      <div class="kv"><span>critical vulns</span><span><b style="color:${n.crit?'var(--crit)':'inherit'}">${n.crit}</b>${fr('vulns')}</span></div>
+      <div class="kv"><span>high vulns</span><span><b>${n.high}</b>${fr('vulns')}</span></div>
+      <div class="kv"><span>last build</span><span>${buildVal}</span></div>
+      <div class="kv"><span>staleness</span><span><b>${n.stale}d</b>${fr('stale')}</span></div>
+      <div class="kv"><span>DIR-2026-03</span><span><b style="color:${n.compliant?'var(--good)':'var(--warn)'}">${n.compliant?'compliant':'non-compliant'}</b>${fr('compliant')}</span></div>
+      ${n.id==="fraud-features"?sparkline():""}
+    </div>
+    <div class="np-sec"><h5>Edges</h5>${edgeProvenance(n.id)}</div>
+    <div class="np-sec"><h5>Details</h5>${kv}</div>
+    <div class="np-sec"><h5>Notes &amp; todos</h5>${todos}</div>
+    ${sum?`<div class="np-sec"><h5>Why it's flagged</h5><div class="np-summary">${sum}</div></div>`:""}`;
+  selcard.querySelectorAll(".add").forEach(btn=>btn.onclick=()=>btn.replaceWith(Object.assign(document.createElement("span"),{className:"missing",textContent:"(inline edit in real build)"})));
+  const rb=selcard.querySelector(".npRefresh"); if(rb) rb.onclick=()=>refreshNode(n.id);
+}
+
+/* ───────── state history / ops ───────── */
+const hist=[];
+const sbBack=document.getElementById("sbBack"), stateDesc=document.getElementById("stateDesc"), srLive=document.getElementById("srLive");
+let curDesc="fleet · all nodes", curChip=null;
+function announce(t){ srLive.textContent=t; }
+function setDesc(d){ curDesc=d; stateDesc.textContent=d; announce("View: "+d); }
+function pkgPresent(){ return nodes.some(n=>n.type==="pkg"); }
+function captureState(){ return {focus:focusSet?[...focusSet]:null, edges:focusEdges?[...focusEdges]:null,
+  sel:[...lastSelection], selset:[...selection], pkg:pkgPresent(), cam:{...cam}, desc:curDesc, chip:curChip}; }
+function pushState(){ hist.push(captureState()); if(hist.length>40)hist.shift(); sbBack.disabled=false; document.getElementById("sbBack2").disabled=false; }
+function restoreState(s){
+  if(s.pkg&&!pkgPresent()) addPkg();
+  if(!s.pkg&&pkgPresent()) removePkg();
+  focusSet=s.focus?new Set(s.focus):null;
+  focusEdges=s.edges?new Set(s.edges):null;
+  lastSelection=[...s.sel]; selection=new Set(s.selset);
+  flyTo(s.cam.x,s.cam.y,s.cam.k);
+  setChip(s.chip); setDesc(s.desc); renderSelCard();
+}
+const sbBack2=document.getElementById("sbBack2");
+function goBack(){ const s=hist.pop(); if(s)restoreState(s); if(!hist.length){sbBack.disabled=true; sbBack2.disabled=true;} }
+sbBack.onclick=goBack; sbBack2.onclick=goBack;
+document.getElementById("sbFitAll").onclick=()=>{ (focusSet&&focusSet.size)?fitIds(focusSet):fitAll(); };
+document.getElementById("sbReset").onclick=()=>applyOp({op:"reset"});
+function setChip(id){ curChip=id;
+  document.querySelectorAll(".vchip[data-view]").forEach(c=>c.classList.toggle("on", c.dataset.view===id)); }
+
+const V2_REPOS=REPOS.filter(r=>r[7]&&r[7].startsWith("2.0")).map(r=>r[0]);
+const PKG_ID="snowflake-connector 2.0";
+function addPkg(){
+  if(byId[PKG_ID]) return;
+  const cx=d3.mean(V2_REPOS.map(r=>byId[r].x)), cy=d3.mean(V2_REPOS.map(r=>byId[r].y));
+  const n={id:PKG_ID, type:"pkg", completeness:1, x:cx, y:cy-30, fx:cx, fy:cy-30, deg:0};
+  nodes.push(n); byId[PKG_ID]=n;
+  V2_REPOS.forEach(r=>links.push({source:byId[PKG_ID], target:byId[r], kind:"uses", ai:false}));
+  recountDeg();
+}
+function removePkg(){
+  if(!byId[PKG_ID]) return;
+  links=links.filter(l=>l.source.id!==PKG_ID&&l.target.id!==PKG_ID);
+  nodes.splice(nodes.findIndex(n=>n.id===PKG_ID),1);
+  delete byId[PKG_ID]; recountDeg();
+}
+function neighborsOf(id){
+  const s=new Set([id]);
+  links.forEach(l=>{ if(l.source.id===id)s.add(l.target.id); if(l.target.id===id)s.add(l.source.id); });
+  return s;
+}
+function applyOp(o){
+  if(o.op!=="reset") pushState();
+  if(o.op==="focus"){
+    const s=neighborsOf(o.node); focusSet=s; focusEdges=null;
+    selection=new Set([o.node]); syncSelection();
+    fitIds(s,.7); setChip(null); setDesc(`focus · ${o.node} + ${s.size-1} neighbors`);
+  }
+  if(o.op==="filter"){
+    focusEdges=null;
+    const s=new Set(); nodes.forEach(n=>{ if(o.pred(n)) s.add(n.id); });
+    lastSelection=[...s].filter(id=>byId[id].type==="repo");
+    if(o.withNeighbors) [...s].forEach(id=>neighborsOf(id).forEach(x=>s.add(x)));
+    focusSet=s; fitIds(s,.8); setChip(o.chip||null);
+    setDesc(`filter · ${o.desc} · ${lastSelection.length} repos`);
+    document.getElementById("saveView").classList.add("show");
+  }
+  if(o.op==="materialize"){
+    if(!lastSelection.length){ focusSet=new Set(V2_REPOS); lastSelection=[...V2_REPOS]; }
+    addPkg(); if(focusSet) focusSet.add(PKG_ID);
+    fitIds(new Set([...V2_REPOS,PKG_ID]),.75);
+    setDesc(`materialized · ${PKG_ID} → ${V2_REPOS.length} repos`);
+  }
+  if(o.op==="path"){
+    const adj={}; nodes.forEach(n=>adj[n.id]=[]);
+    links.forEach((l,i)=>{adj[l.source.id].push([l.target.id,i]); adj[l.target.id].push([l.source.id,i]);});
+    const prev={}, prevE={}, q=[o.from]; const seen=new Set([o.from]);
+    while(q.length){ const u=q.shift(); if(u===o.to)break;
+      for(const [v,ei] of adj[u]) if(!seen.has(v)){seen.add(v);prev[v]=u;prevE[v]=ei;q.push(v);} }
+    if(!seen.has(o.to)){ hist.pop(); if(!hist.length)sbBack.disabled=true; return false; }
+    const ns=new Set(), es=new Set(); let cur=o.to;
+    while(cur){ ns.add(cur); if(prevE[cur]!==undefined)es.add(prevE[cur]); cur=prev[cur]; }
+    focusSet=ns; focusEdges=es; fitIds(ns,.7); setChip(null);
+    setDesc(`path · ${o.from} → ${o.to}`);
+  }
+  if(o.op==="reset"){
+    pushState();
+    clearFocus(); selection.clear(); lastSelection=[]; removePkg();
+    flyTo(0,0,1); setChip(null); setDesc("fleet · all nodes"); renderSelCard();
+  }
+  return true;
+}
+
+/* saved views (chips) */
+const PREDS={
+  crit:{p:n=>n.type==="repo"&&n.crit>0, d:"critical vulns"},
+  noncompliant:{p:n=>n.type==="repo"&&n.compliant===false, d:"non-compliant DIR-2026-03"},
+};
+document.querySelectorAll(".vchip[data-view]").forEach(ch=>{
+  ch.onclick=()=>{
+    if(ch._editing) return;
+    if(ch.classList.contains("on")){ applyOp({op:"reset"}); return; }
+    const f=ch.dataset.view;
+    if(PREDS[f]) applyOp({op:"filter", pred:PREDS[f].p, desc:PREDS[f].d, chip:f});
+    else if(ch._ids) applyOp({op:"filter", pred:n=>ch._ids.includes(n.id), desc:ch._label||ch.textContent, chip:f});
+  };
+});
+document.getElementById("saveView").onclick=()=>{
+  if(!focusSet) return;
+  const ids=[...focusSet]; const label=curDesc.replace(/^filter · /,"").replace(/ · \d+ repos$/,"");
+  const b=document.createElement("button");
+  b.className="vchip"; b.dataset.view="saved-"+Date.now(); b._ids=ids; b._label=label;
+  b.innerHTML=`${label}<span class="vx" title="delete view">✕</span>`;
+  b.onclick=()=>{ if(b._editing) return;
+    if(b.classList.contains("on")){applyOp({op:"reset"});return;}
+    applyOp({op:"filter", pred:n=>ids.includes(n.id), desc:b._label, chip:b.dataset.view}); };
+  document.getElementById("vchips").insertBefore(b, document.getElementById("saveView"));
+  announce(`Saved view: ${label}`);
+};
+/* manage saved views: hover ✕ deletes, double-click renames */
+const vchipsEl=document.getElementById("vchips");
+vchipsEl.addEventListener("click",e=>{
+  const x=e.target.closest(".vx"); if(!x) return;
+  e.stopPropagation();
+  const chip=x.closest(".vchip"); const was=chip.classList.contains("on");
+  chip.remove(); if(was) applyOp({op:"reset"});
+  announce("View deleted");
+},true);
+vchipsEl.addEventListener("dblclick",e=>{
+  const chip=e.target.closest(".vchip"); if(!chip||chip.id==="saveView"||chip._editing) return;
+  e.preventDefault();
+  const cur=(chip._label||chip.textContent.replace(/✕$/,"")).trim();
+  chip._editing=true;
+  chip.innerHTML=`<input class="vrename" value="${cur.replace(/"/g,'&quot;')}">`;
+  const inp=chip.querySelector("input"); inp.focus(); inp.select();
+  const finish=(v)=>{ chip._editing=false; chip._label=v;
+    chip.innerHTML=`${v}<span class="vx" title="delete view">✕</span>`; };
+  inp.addEventListener("keydown",ev=>{
+    if(ev.key==="Enter"){ finish(inp.value.trim()||cur); announce(`View renamed to ${chip._label}`); }
+    else if(ev.key==="Escape"){ finish(cur); }
+  });
+  inp.addEventListener("blur",()=>{ if(chip._editing) finish(inp.value.trim()||cur); });
+});
+
+/* ───────── transcript / ask ───────── */
+const transcript=document.getElementById("transcript");
+const sessionAllow={};
+const grants=document.getElementById("grants");
+document.getElementById("revokeIssues").onclick=()=>{ delete sessionAllow.issues; grants.classList.remove("show"); announce("Session grant revoked: fetch issues"); };
+function bubble(html, cls=""){
+  const d=document.createElement("div"); d.className="bubble "+cls; d.innerHTML=html;
+  transcript.appendChild(d); transcript.scrollTop=transcript.scrollHeight;
+  return d;
+}
+const opChip=(txt,cls="")=>`<span class="op mono ${cls}">${txt}</span>`;
+
+/* briefing seed — the sidebar greets you with the diff */
+function seedBriefing(){
+  const ex=transcript.querySelector(".bubble.brief");
+  if(ex){ ex.scrollIntoView({block:"nearest"}); return; }
+  const d=bubble(`<button class="brief-x" aria-label="Dismiss briefing" title="Dismiss — reopen with ☼ above">✕</button>
+    <div class="brief-h">since yesterday · 2026-08-12</div>
+    <button class="brief-line" data-act="focus" data-node="fraud-features">▲ +2 criticals on <span class="mono">fraud-features</span> <span class="d">— build still failing</span></button>
+    <button class="brief-line" data-act="focus" data-node="device-fingerprint">● <span class="mono">device-fingerprint</span> crossed stale <span class="d">— 51d, no owner</span></button>
+    <button class="brief-line" data-act="filter-dir">✓ DIR-2026-03 compliance 71% → 74% <span class="d">— 5 repos remain</span></button>`,"brief");
+  d.querySelector(".brief-x").onclick=()=>d.remove();
+  d.querySelectorAll(".brief-line").forEach(b=>b.onclick=()=>{
+    if(b.dataset.act==="focus") applyOp({op:"focus", node:b.dataset.node});
+    else applyOp({op:"filter", pred:PREDS.noncompliant.p, desc:PREDS.noncompliant.d, chip:"noncompliant"});
+  });
+}
+document.getElementById("briefBtn").onclick=seedBriefing;
+function stepOne(){
+  const list=V2_REPOS.map(r=>`<span class="mono">${r}</span>`).join(", ");
+  const d=bubble(`<b>${V2_REPOS.length} repos</b> pin <span class="mono">snowflake-connector-python 2.0.x</span> (dep scan · 26h old): ${list}. Three also carry critical vulns.
+    <div class="ops">
+      ${opChip('suggest: {"op":"filter","where":"deps.snowflake-connector ~ 2.0"}','suggested s1')}
+      ${opChip('suggest: {"op":"materialize","package":"snowflake-connector 2.0"}','suggested s2')}
+    </div>`);
+  d.querySelector(".s1").onclick=(e)=>{
+    applyOp({op:"filter", pred:n=>n.type==="repo"&&n.sc&&n.sc.startsWith("2.0"), desc:"deps.snowflake-connector ~ 2.0"});
+    e.target.classList.remove("suggested"); e.target.classList.add("done"); e.target.textContent='applied: filter deps ~ 2.0';
+  };
+  d.querySelector(".s2").onclick=(e)=>{
+    applyOp({op:"materialize"});
+    e.target.classList.remove("suggested"); e.target.classList.add("done"); e.target.textContent='applied: materialize package node';
+  };
+}
+function stepTwo(){
+  if(!lastSelection.length){
+    bubble(`No active selection to resolve <i>“these repos”</i> — run step 1, apply a filter, or ⇧-click nodes first. Selection travels with every query.`);
+    return;
+  }
+  const sel=[...lastSelection];
+  const run=()=>{
+    const d=bubble(`<span class="fetching">fetching open issues for ${sel.length} repos from GitHub…</span>`);
+    setTimeout(()=>{
+      const rows=sel.filter(r=>ISSUES[r]).map(r=>ISSUES[r].map(i=>
+        `<div class="issue"><span class="repo mono">${r}</span><a href="#" onclick="return false">#${i.n}</a><span>${i.t}</span></div>`).join("")).join("");
+      const hits=sel.filter(r=>ISSUES[r]).length;
+      d.innerHTML=`<b>${hits} of ${sel.length}</b> selected repos have open issues mentioning connector v2.0 vulns — all pointing at <span class="mono">CVE-2026-2214</span>:
+        ${rows}
+        <div style="margin-top:6px;color:var(--muted)">The remaining ${sel.length-hits} pin 2.0.x with no issue filed yet — arguably the more urgent finding.</div>
+        <div class="ops">${opChip('executed: {"op":"fetch","collector":"issues","nodes":['+sel.length+']}','done')}</div>
+        <div class="auditline mono">audit: fetch_issues · ${sel.length} nodes · approved by dan · 2026-08-12 14:02 · logged</div>`;
+      transcript.scrollTop=transcript.scrollHeight;
+    },1100);
+  };
+  if(sessionAllow.issues){ run(); return; }
+  const d=bubble(`I can check, but it needs a live GitHub call beyond the nightly snapshot.
+    <div class="gate">
+      <div class="g-title">approval required · external fetch</div>
+      <span class="mono">{"op":"fetch","collector":"issues","nodes":[${sel.length} repos]}</span>
+      <div class="g-btns">
+        <button class="ok gA">approve</button>
+        <button class="gD">deny</button>
+        <button class="gS">always this session</button>
+      </div>
+    </div>`);
+  d.querySelector(".gA").onclick=()=>{ d.remove(); run(); };
+  d.querySelector(".gS").onclick=()=>{ sessionAllow.issues=true; grants.classList.add("show"); d.remove(); run(); };
+  d.querySelector(".gD").onclick=()=>{
+    d.innerHTML=`Understood — no live call. From the 7h-old issues snapshot: <b>4</b> fleet repos had open issues mentioning connector v2.0.
+      <div class="ops">${opChip('denied: fetch issues','done')}</div>`;
+  };
+}
+function handle(q){
+  q=q.toLowerCase().trim(); if(!q)return;
+  if(q==="reset"||q.includes("reset")){ applyOp({op:"reset"}); bubble(`Cleared filters, dissolved materialized nodes, recentred.<div class="ops">${opChip('{"op":"reset"}','done')}</div>`); return; }
+  if(q.includes("2.0")&&(q.includes("connector")||q.includes("use"))&&!q.includes("issue")){ stepOne(); return; }
+  if(q.includes("issue")){ stepTwo(); return; }
+  if(q.includes("critical")||q.includes("vuln")){
+    applyOp({op:"filter", pred:PREDS.crit.p, desc:PREDS.crit.d, chip:"crit"});
+    bubble(`<b>${lastSelection.length} repos</b> carry critical vulns. Worst: <span class="mono">fraud-features</span> (3 crit + failing build), high-centrality — two models read its output table.
+      <div class="ops">${opChip('{"op":"filter","where":"vulns.critical > 0"}','done')}</div>`);
+    return;
+  }
+  if(q.includes("path")){
+    const ok=applyOp({op:"path", from:"txn_agg", to:"card-decision-model"});
+    bubble(ok?`Shortest dependency path <span class="mono">txn_agg → card-decision-model</span> — direct read, no buffer. Open migration todo on this edge (→ txn_agg_v2, due Oct 1).
+      <div class="ops">${opChip('{"op":"path","from":"table:txn_agg","to":"repo:card-decision-model"}','done')}</div>`:"No path found.");
+    return;
+  }
+  if(q.includes("focus")){
+    const name=nodes.find(n=>q.includes(n.id));
+    const id=name?name.id:"fraud-features";
+    applyOp({op:"focus", node:id});
+    bubble(`Focused on <span class="mono">${id}</span> and neighbors.<div class="ops">${opChip(`{"op":"focus","node":"repo:${id}","depth":1}`,'done')}</div>`);
+    return;
+  }
+  bubble(`Mockup understands the chips below. Real build: <span class="mono">claude -p</span> with (graph, view_state, conversation) → {answer, view_ops[]}.`);
+}
+const ask=document.getElementById("ask");
+ask.addEventListener("keydown",e=>{ if(e.key==="Enter"){handle(ask.value); ask.value="";} });
+document.querySelectorAll(".sb-suggest button").forEach(b=>b.onclick=()=>handle(b.dataset.q));
+
+/* ───────── views: grid + todos ───────── */
+const grid=document.getElementById("grid"), todosView=document.getElementById("todosView");
+function buildGrid(){
+  const order={crit:0,unknown:1,warn:2,good:3};
+  const rs=nodes.filter(n=>n.type==="repo").sort((a,b)=>order[health(a)]-order[health(b)]||a.completeness-b.completeness);
+  grid.innerHTML=rs.map(n=>{
+    const h=health(n);
+    return `<button class="tile" data-id="${n.id}" role="listitem" aria-label="${n.id}: ${healthLine(n)}">
+      <div class="bar" style="background:${HCOL[h]}"></div>
+      <h4 class="mono">${GLYPH[h]?GLYPH[h]+" ":""}${n.id}</h4>
+      <div class="sig">
+        ${n.crit?`<span class="sigchip crit">${n.crit} crit</span>`:""}
+        ${n.build==="fail"?`<span class="sigchip crit">build ✕</span>`:""}
+        ${n.build==="unknown"?`<span class="sigchip unknown">build ?</span>`:""}
+        ${n.stale>30?`<span class="sigchip warn">stale ${n.stale}d</span>`:""}
+        ${!n.compliant?`<span class="sigchip warn">DIR-03 ✕</span>`:""}
+        ${n.sc&&n.sc.startsWith("2.0")?`<span class="sigchip warn">sc 2.0</span>`:""}
+        ${h==="good"?`<span class="sigchip">healthy</span>`:""}
+      </div>
+      <div class="completeness"><div class="cbar"><i style="width:${n.completeness*100}%"></i></div>${Math.round(n.completeness*100)}%</div>
+    </button>`;}).join("");
+  grid.querySelectorAll(".tile").forEach(t=>t.onclick=()=>{ setView("graph"); applyOp({op:"focus", node:t.dataset.id}); });
+}
+buildGrid();
+function buildTodos(){
+  const open=TODO_ROWS.filter(r=>!r.done), done=TODO_ROWS.filter(r=>r.done);
+  const row=r=>`<tr class="${r.done?'done':''}">
+    <td>${r.done?'✓ ':''}${r.t}</td>
+    <td><button class="tlink" data-node="${r.node}">${r.target}</button></td>
+    <td>${r.over?`<span class="badge over">${r.due}</span>`:r.due}</td>
+    <td>${r.recur?`<span class="badge recur">every ${r.recur}</span>`:"—"}</td>
+    <td>${r.done?'<span class="badge">history</span>':'<button class="tlink">mark done</button>'}</td></tr>`;
+  document.getElementById("todoRows").innerHTML=open.map(row).join("")+done.map(row).join("");
+  todosView.querySelectorAll(".tlink[data-node]").forEach(b=>b.onclick=()=>{
+    setView("graph"); applyOp({op:"focus", node:b.dataset.node});
+  });
+}
+buildTodos();
+
+const btnGraph=document.getElementById("btnGraph"), btnGrid=document.getElementById("btnGrid"), btnTodos=document.getElementById("btnTodos");
+function setView(v){
+  [["graph",btnGraph],["grid",btnGrid],["todos",btnTodos]].forEach(([name,btn])=>{
+    btn.classList.toggle("active",v===name); btn.setAttribute("aria-selected",v===name);
+  });
+  grid.classList.toggle("show",v==="grid");
+  todosView.classList.toggle("show",v==="todos");
+  cv.style.visibility=v==="graph"?"visible":"hidden";
+}
+btnGraph.onclick=()=>setView("graph");
+btnGrid.onclick=()=>setView("grid");
+btnTodos.onclick=()=>setView("todos");
+
+/* ───────── search ───────── */
+const searchOv=document.getElementById("searchOv"), searchIn=document.getElementById("searchIn"), searchList=document.getElementById("searchList");
+let sIdx=0, sResults=[];
+function openSearch(){ searchOv.classList.add("open"); searchIn.value=""; renderSearch(""); searchIn.focus(); }
+function closeSearch(){ searchOv.classList.remove("open"); }
+function renderSearch(q){
+  q=q.toLowerCase();
+  sResults=nodes.filter(n=>n.id.toLowerCase().includes(q)).slice(0,9); sIdx=0;
+  searchList.innerHTML=sResults.map((n,i)=>`<li class="${i===0?'sel':''}" data-id="${n.id}" role="option">
+    <span class="sdot" style="background:${HCOL[health(n)]}"></span>
+    <span class="mono">${n.id}</span><span class="stype">${n.type} · ${HWORD[health(n)]||n.type}</span></li>`).join("");
+  searchList.querySelectorAll("li").forEach(li=>li.onclick=()=>pickSearch(li.dataset.id));
+}
+function pickSearch(id){ closeSearch(); applyOp({op:"focus", node:id}); }
+searchIn.addEventListener("input",()=>renderSearch(searchIn.value));
+searchIn.addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"){sIdx=Math.min(sIdx+1,sResults.length-1);e.preventDefault();}
+  else if(e.key==="ArrowUp"){sIdx=Math.max(sIdx-1,0);e.preventDefault();}
+  else if(e.key==="Enter"&&sResults[sIdx]){pickSearch(sResults[sIdx].id);return;}
+  else if(e.key==="Escape"){closeSearch();return;}
+  searchList.querySelectorAll("li").forEach((li,i)=>li.classList.toggle("sel",i===sIdx));
+});
+searchOv.addEventListener("click",e=>{ if(e.target===searchOv) closeSearch(); });
+document.getElementById("btnSearch").onclick=openSearch;
+
+/* ───────── keyboard ───────── */
+const appEl=document.getElementById("app");
+document.addEventListener("keydown",e=>{
+  const typing=/INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openSearch();return;}
+  if((e.metaKey||e.ctrlKey)&&e.key==="/"){e.preventDefault();toggleSidebar();return;}
+  if(typing) return;
+  if(e.key==="/"){e.preventDefault();openSearch();}
+  else if(e.key==="Escape"){ selection.clear(); syncSelection(); }
+  else if(e.key==="+"||e.key==="="){ cam.k=Math.min(3.2,cam.k*1.2); camTarget=null; }
+  else if(e.key==="-"){ cam.k=Math.max(.35,cam.k/1.2); camTarget=null; }
+  else if(e.key==="0"){ fitAll(); }
+  else if(e.key==="ArrowLeft"){ cam.x+=60; camTarget=null; }
+  else if(e.key==="ArrowRight"){ cam.x-=60; camTarget=null; }
+  else if(e.key==="ArrowUp"){ cam.y+=60; camTarget=null; }
+  else if(e.key==="ArrowDown"){ cam.y-=60; camTarget=null; }
+});
+
+/* ───────── sidebar collapse / popovers / hint / banner / refresh ───────── */
+function toggleSidebar(){ appEl.classList.toggle("sbHidden"); resize(); }
+document.getElementById("sbCollapse").onclick=toggleSidebar;
+document.getElementById("sbExpand").onclick=toggleSidebar;
+["fresh","legend"].forEach(id=>{
+  const el=document.getElementById(id);
+  el.querySelector("button").onclick=()=>{ el.classList.toggle("open");
+    el.querySelector("button").setAttribute("aria-expanded",el.classList.contains("open")); };
+});
+document.addEventListener("click",e=>{
+  ["fresh","legend"].forEach(id=>{ const el=document.getElementById(id);
+    if(!el.contains(e.target)) el.classList.remove("open"); });
+});
+document.getElementById("hintX").onclick=()=>document.getElementById("hintstrip").remove();
+document.getElementById("bannerX").onclick=()=>{ document.getElementById("banner").style.display="none"; appEl.classList.add("nobanner"); resize(); };
+
+function maybeClearJenkins(){
+  if(nodes.some(n=>n.type==="repo"&&n.build==="unknown")) return;
+  const b=document.getElementById("banner");
+  if(b&&b.style.display!=="none"){ b.style.display="none"; appEl.classList.add("nobanner"); resize(); }
+  const v=document.getElementById("frJenkinsVal");
+  if(v){ v.textContent="just now"; document.getElementById("frJenkinsRow").classList.remove("bad"); }
+  const p=document.getElementById("pulse");
+  if(p){ p.style.background="var(--good)"; p.style.boxShadow="0 0 8px var(--good)"; p.title="all collectors ok"; }
+}
+function refreshNode(id){
+  const n=byId[id]; if(!n) return;
+  n.justRefreshed=true;
+  if(n.build==="unknown") n.build="pass";
+  maybeClearJenkins(); buildGrid(); renderSelCard();
+  announce(`Refreshed signals for ${id}`);
+}
+document.getElementById("bannerRetry").onclick=()=>{
+  nodes.forEach(n=>{ if(n.type==="repo"&&n.build==="unknown"){ n.build="pass"; n.justRefreshed=true; } });
+  maybeClearJenkins(); buildGrid(); renderSelCard();
+  announce("Jenkins collector re-run — unknown build statuses resolved");
+};
+document.getElementById("btnExport").onclick=()=>
+  bubble(`Static export: in the real build this runs <span class="mono">make render-static</span> → a read-only grid page for decks.`);
+
+/* init */
+renderSelCard();
+seedBriefing();
+fitAll();
+</script>
+</body>
+</html>

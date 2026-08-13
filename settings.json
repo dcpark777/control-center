@@ -1,0 +1,31 @@
+{
+  "$comment": "cosmo project settings — commit as .claude/settings.json. Managed (org) settings always take precedence; this only pre-allows the boring loop and adds belt-and-suspenders denies. Personal overrides (e.g. dev data dir) go in .claude/settings.local.json, gitignored: {\"env\": {\"COSMO_DATA_DIR\": \"./data-dev\"}}",
+  "env": {
+    "COSMO_DATA_DIR": "./data"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(pytest:*)",
+      "Bash(python collectors/*)",
+      "Bash(python graph/*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git filter-branch:*)",
+      "Read(./.env)",
+      "Read(./**/.env)"
+    ]
+  }
+}
